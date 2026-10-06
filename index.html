@@ -1,0 +1,590 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Map Explorer</title>
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Ctext y='.9em' font-size='90'%3E🗺️%3C/text%3E%3C/svg%3E">
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.css">
+<style>
+:root{--ink:#10303f;--mist:#eef4f4;--line:#cfdede;--sea:#1b7a99;--amber:#f2b134;--route:#e4572e;--bg:#fff;--tx:#10303f;--mu:#5b7482}
+@media(prefers-color-scheme:dark){:root{--bg:#10303f;--tx:#eef4f4;--mu:#9bb5c1;--line:#25495a;--mist:#173b4c}}
+*{box-sizing:border-box}
+html,body{height:100%;margin:0;font:15px/1.4 "Avenir Next","Century Gothic","Trebuchet MS",sans-serif;color:var(--tx)}
+#map{position:absolute;inset:0}
+button,input{font:inherit;color:inherit}
+button{cursor:pointer}
+:focus-visible{outline:3px solid var(--amber);outline-offset:1px}
+#panel{position:absolute;z-index:1000;top:12px;left:12px;width:370px;max-width:calc(100% - 24px);max-height:calc(100% - 24px);display:flex;flex-direction:column;background:var(--bg);border-radius:14px;box-shadow:0 6px 28px rgba(16,48,63,.35);overflow:hidden}
+.top{display:flex;align-items:center;justify-content:space-between;padding:12px 14px;background:var(--ink);color:#eef4f4}
+.top b{font-size:18px;letter-spacing:.3px}
+.top b i{font-style:normal;color:var(--amber)}
+.seg{display:flex;background:#0b2230;border-radius:20px;padding:3px}
+.seg button{border:0;background:none;color:#9bb5c1;padding:5px 14px;border-radius:16px}
+.seg button.on{background:var(--amber);color:var(--ink);font-weight:700}
+section{padding:12px 14px;overflow:auto}
+form{display:flex;gap:6px}
+input{flex:1;min-width:0;padding:10px 12px;border:1.5px solid var(--line);border-radius:10px;background:var(--mist)}
+input:focus{border-color:var(--sea);outline:none}
+.go,form button{border:0;background:var(--sea);color:#fff;border-radius:10px;padding:10px 14px;font-weight:700}
+#vR input{width:100%;margin-bottom:8px}
+.modes{display:flex;gap:6px;margin:2px 0 10px}
+.modes button{flex:1;padding:8px;border:1.5px solid var(--line);border-radius:10px;background:none}
+.modes button.on{border-color:var(--sea);background:var(--sea);color:#fff}
+#vR .go{width:100%}
+ul,ol{margin:10px 0 0;padding:0;list-style:none}
+#list li{padding:9px 6px;border-top:1px solid var(--line);cursor:pointer}
+#list li:hover,#list li:focus{background:var(--mist)}
+#list small,#card p,.c,#steps small{color:var(--mu)}
+#list small{display:block}
+#card h3{margin:12px 0 2px;font-size:19px}
+#card p{margin:2px 0}
+.btns{display:flex;flex-wrap:wrap;gap:6px;margin-top:10px}
+.btns button{border:1.5px solid var(--sea);background:none;color:var(--sea);border-radius:18px;padding:6px 12px;font-weight:600}
+.btns button:first-child{background:var(--sea);color:#fff}
+#sum{margin-top:12px;font-size:17px;font-weight:700}
+#sum span{color:var(--route)}
+#steps{max-height:36vh;overflow:auto;counter-reset:s}
+#steps li{padding:7px 0 7px 28px;border-top:1px solid var(--line);position:relative}
+#steps li:before{counter-increment:s;content:counter(s);position:absolute;left:0;top:8px;width:20px;height:20px;border-radius:50%;background:var(--mist);font-size:11px;text-align:center;line-height:20px}
+#ctl{position:absolute;z-index:1000;right:12px;top:12px;display:flex;flex-direction:column;gap:6px}
+#ctl button{width:42px;height:42px;border:0;border-radius:10px;background:var(--bg);box-shadow:0 2px 10px rgba(16,48,63,.3);font-size:20px}
+#lay{position:absolute;z-index:1000;left:12px;bottom:26px;display:flex;gap:6px;background:var(--bg);padding:6px;border-radius:12px;box-shadow:0 2px 10px rgba(16,48,63,.3)}
+#lay button{border:2px solid transparent;border-radius:8px;background:var(--mist);padding:6px 10px;font-size:13px}
+#lay button.on{border-color:var(--amber);font-weight:700}
+#toast{position:absolute;z-index:1100;left:50%;bottom:80px;transform:translateX(-50%);background:var(--ink);color:#fff;padding:9px 16px;border-radius:20px;opacity:0;pointer-events:none;transition:opacity .2s}
+#toast.show{opacity:1}
+@media(max-width:600px){#panel{width:auto;right:12px}#ctl{top:auto;bottom:90px}#lay{bottom:12px}}
+.brand{display:flex;align-items:center;gap:9px}
+#logo{height:34px;border-radius:8px;background:#fff;padding:2px 3px}
+#col{border:0;background:none;color:#9bb5c1;font-size:18px;margin-left:4px}
+#panel.min section{display:none}
+:root[data-t=light]{--bg:#fff;--tx:#10303f;--mu:#5b7482;--line:#cfdede;--mist:#eef4f4}
+:root[data-t=dark]{--bg:#10303f;--tx:#eef4f4;--mu:#9bb5c1;--line:#25495a;--mist:#173b4c}
+#hist li,#fav li{padding:8px 6px;border-top:1px solid var(--line);cursor:pointer;display:flex;justify-content:space-between;gap:8px}
+#hist li:hover,#fav li:hover{background:var(--mist)}
+#fav small{color:var(--mu);display:block}
+#cats{display:flex;flex-wrap:wrap;gap:6px;margin-top:10px}
+#cats button{border:1.5px solid var(--line);background:none;border-radius:16px;padding:4px 10px;font-size:13px}
+#cats button:hover{border-color:var(--sea)}
+.btns a{border:1.5px solid var(--sea);color:var(--sea);border-radius:18px;padding:6px 12px;font-weight:600;text-decoration:none}
+#ctl button.on{background:var(--amber)}
+#ctl{max-height:calc(100% - 24px);overflow:auto}
+#steps li{cursor:pointer}
+#hud{position:absolute;z-index:1000;left:50%;bottom:8px;transform:translateX(-50%);background:rgba(16,48,63,.85);color:#fff;font-size:12px;padding:3px 10px;border-radius:10px;pointer-events:none}
+#hud:empty{display:none}
+body{font-family:var(--ff,"Avenir Next","Century Gothic","Trebuchet MS",sans-serif)}
+:root{--pin:#f2b134;--pinS:#10303f}
+#uim{position:absolute;z-index:1100;right:62px;bottom:12px;background:var(--bg);border-radius:12px;box-shadow:0 4px 18px rgba(16,48,63,.35);padding:6px;display:flex;flex-direction:column;gap:2px}
+#lgm{position:absolute;z-index:1100;right:62px;top:12px;background:var(--bg);border-radius:12px;box-shadow:0 4px 18px rgba(16,48,63,.35);padding:6px;display:flex;flex-direction:column;gap:2px}
+  
+#uim button,#lgm button{border:0;background:none;text-align:left;padding:8px 14px;border-radius:8px;white-space:nowrap}
+#uim button:hover,#uim button.on,#lgm button:hover,#lgm button.on{background:var(--mist);font-weight:700}
+/* Interfaz tipo Google Maps */
+:root[data-ui=google]{--sea:#1a73e8;--amber:#1a73e8;--route:#4285f4;--pin:#ea4335;--pinS:#a50e0e;--ff:Roboto,Arial,sans-serif}
+[data-ui=google] #panel{border-radius:8px;box-shadow:0 2px 6px rgba(60,64,67,.35)}
+[data-ui=google] .top{background:var(--bg);color:var(--tx);border-bottom:1px solid var(--line)}
+[data-ui=google] .top b i,[data-ui=google] #col{color:#1a73e8}
+[data-ui=google] .seg{background:var(--mist)}
+[data-ui=google] .seg button{color:var(--mu)}
+[data-ui=google] .seg button.on{background:#1a73e8;color:#fff}
+[data-ui=google] input{border-radius:24px;background:var(--bg);box-shadow:0 1px 4px rgba(60,64,67,.3);border-color:transparent}
+[data-ui=google] form button,[data-ui=google] .go{border-radius:24px}
+[data-ui=google] #ctl button{border-radius:50%}
+/* Interfaz tipo Apple Maps */
+:root[data-ui=apple]{--sea:#0a84ff;--amber:#0a84ff;--route:#0a84ff;--pin:#ff3b30;--pinS:#fff;--ff:-apple-system,"SF Pro Text","Helvetica Neue",Arial,sans-serif}
+[data-ui=apple] #panel,[data-ui=apple] #lay,[data-ui=apple] #ctl button{background:color-mix(in srgb,var(--bg) 72%,transparent);-webkit-backdrop-filter:blur(22px) saturate(1.6);backdrop-filter:blur(22px) saturate(1.6)}
+[data-ui=apple] #panel{border-radius:20px}
+[data-ui=apple] .top{background:transparent;color:var(--tx)}
+[data-ui=apple] .top b i,[data-ui=apple] #col{color:#0a84ff}
+[data-ui=apple] .seg{background:color-mix(in srgb,var(--mist) 80%,transparent)}
+[data-ui=apple] .seg button{color:var(--mu)}
+[data-ui=apple] .seg button.on{background:#0a84ff;color:#fff}
+[data-ui=apple] input{border-radius:12px;border-color:transparent;background:color-mix(in srgb,var(--mist) 85%,transparent)}
+[data-ui=apple] #ctl button{border-radius:12px}
+/* Interfaz tipo Waze */
+:root[data-ui=waze]{--sea:#1ab7f0;--amber:#ffd24d;--route:#33ccff;--pin:#33ccff;--pinS:#07293d;--ff:Nunito,"Trebuchet MS",Verdana,sans-serif}
+[data-ui=waze] #panel{border-radius:26px}
+[data-ui=waze] .top{background:#33ccff;color:#07293d}
+[data-ui=waze] .top b i{color:#fff;text-shadow:0 1px 0 #0a7fb0}
+[data-ui=waze] #col{color:#07293d}
+[data-ui=waze] .seg{background:rgba(255,255,255,.55)}
+[data-ui=waze] .seg button{color:#07293d}
+[data-ui=waze] .seg button.on{background:#fff;color:#07293d}
+[data-ui=waze] input{border-radius:22px}
+[data-ui=waze] form button,[data-ui=waze] .go,[data-ui=waze] .btns button:first-child,[data-ui=waze] .modes button.on{border-radius:22px;color:#07293d;font-weight:800;background:#33ccff}
+[data-ui=waze] #ctl button,[data-ui=waze] #lay{border-radius:18px}
+</style>
+</head>
+<body>
+<div id="map"></div>
+
+<aside id="panel">
+  <div class="top"><span class="brand"><img id="logo" alt="" src="data:image/png;base64,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"><b>Map<i>Explorer</i></b></span>
+    <div class="seg"><button id="tS" class="on">Lugares</button><button id="tR">Ruta</button><button id="tF" aria-label="Guardados">⭐</button></div><button id="col" aria-label="Contraer panel">▾</button>
+  </div>
+  <section id="vS">
+    <form id="fS"><input id="q" placeholder="Busca un lugar o dirección" autocomplete="off" aria-label="Buscar lugar"><button>Buscar</button></form>
+    <ul id="hist"></ul>
+    <div id="cats"></div>
+    <ul id="list" aria-live="polite"></ul>
+    <div id="card" hidden></div>
+  </section>
+  <section id="vR" hidden>
+    <input id="a" placeholder="Origen (o escribe: Mi ubicación)" aria-label="Origen">
+    <input id="b" placeholder="Destino" aria-label="Destino">
+    <div class="modes">
+      <button data-p="car" class="on">🚗 Auto</button><button data-p="bike">🚴 Bici</button><button data-p="foot">🚶 A pie</button>
+    </div>
+    <div class="modes"><button id="sw">⇅ Invertir</button><button id="mp">📍 Desde mi ubicación</button><button id="cl">✕ Borrar</button></div>
+    <button class="go" id="go">Calcular ruta</button>
+    <div id="sum"></div>
+    <ol id="steps"></ol>
+  </section>
+  <section id="vF" hidden><ul id="fav"></ul></section>
+</aside>
+
+<div id="ctl">
+  <button id="zi" aria-label="Acercar">+</button>
+  <button id="zo" aria-label="Alejar">−</button>
+  <button id="loc" aria-label="Mi ubicación">◎</button><button id="fl" aria-label="Seguir mi ubicación">🧭</button><button id="ms" aria-label="Medir distancia">📏</button><button id="hm" aria-label="Ver el mundo">🌍</button><button id="fs" aria-label="Pantalla completa">⛶</button><button id="dk" aria-label="Cambiar tema">🌓</button><button id="ui" aria-label="Cambiar interfaz">🎨</button><button id="lg" aria-label="Idioma">🌐</button>
+</div>
+<div id="lay"></div>
+<div id="uim" hidden></div>
+<div id="lgm" hidden></div>
+<div id="hud"></div>
+<div id="toast"></div>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.js"></script>
+<script>
+const $=s=>document.querySelector(s);
+const esc=s=>String(s).replace(/[&<>"]/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]));
+
+/* ---------- Mapa y capas ---------- */
+const map=L.map("map",{zoomControl:false}).setView([23.6,-102.5],5);
+L.control.scale({imperial:false,position:"bottomright"}).addTo(map);
+const LAYERS={
+  calles:["Mapa",L.tileLayer("https://server.arcgisonline.com/ArcGIS/rest/services/World_Street_Map/MapServer/tile/{z}/{y}/{x}",{maxZoom:19,attribution:"Mapa © Esri, HERE, Garmin, OpenStreetMap"})],
+  sat:["Satélite",L.tileLayer("https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}",{maxZoom:19,attribution:"Imágenes © Esri"})],
+  relieve:["Relieve",L.tileLayer("https://server.arcgisonline.com/ArcGIS/rest/services/World_Topo_Map/MapServer/tile/{z}/{y}/{x}",{maxZoom:19,attribution:"Mapa © Esri, USGS, NOAA"})],
+  oscuro:["Oscuro",L.tileLayer("https://server.arcgisonline.com/ArcGIS/rest/services/Canvas/World_Dark_Gray_Base/MapServer/tile/{z}/{y}/{x}",{maxZoom:19,maxNativeZoom:16,attribution:"Mapa © Esri, HERE, Garmin"})]
+};
+let base;
+function setBase(k){
+  base&&map.removeLayer(base);
+  base=LAYERS[k][1].addTo(map);
+  document.querySelectorAll("#lay button").forEach(b=>b.classList.toggle("on",b.dataset.k===k));
+  try{localStorage.mxLayer=k}catch(e){}
+}
+for(const k in LAYERS){
+  const b=document.createElement("button");
+  b.textContent=LAYERS[k][0];b.dataset.k=k;b.onclick=()=>setBase(k);
+  $("#lay").append(b);
+}
+let saved="calles";try{saved=localStorage.mxLayer||"calles"}catch(e){}
+setBase(LAYERS[saved]?saved:"calles");
+
+const toast=m=>{const t=$("#toast");t.textContent=m;t.classList.add("show");clearTimeout(toast.id);toast.id=setTimeout(()=>t.classList.remove("show"),2800)};
+$("#zi").onclick=()=>map.zoomIn();
+$("#zo").onclick=()=>map.zoomOut();
+
+/* ---------- Posición en el enlace ---------- */
+map.on("moveend",()=>{const c=map.getCenter();history.replaceState(null,"","#"+map.getZoom()+"/"+c.lat.toFixed(5)+"/"+c.lng.toFixed(5))});
+const h=location.hash.match(/^#(\d+)\/(-?[\d.]+)\/(-?[\d.]+)/);
+if(h)map.setView([+h[2],+h[3]],+h[1]);
+
+/* ---------- Ubicación ---------- */
+const me=()=>new Promise((ok,no)=>navigator.geolocation?navigator.geolocation.getCurrentPosition(p=>ok([p.coords.latitude,p.coords.longitude]),()=>no("No pude obtener tu ubicación. Revisa los permisos del navegador."),{enableHighAccuracy:true,timeout:10000}):no("Tu navegador no tiene geolocalización."));
+let dot;
+$("#loc").onclick=async()=>{
+  try{
+    const p=await me();
+    dot&&map.removeLayer(dot);
+    dot=L.circleMarker(p,{radius:8,color:"#fff",weight:3,fillColor:"#1b7a99",fillOpacity:1}).addTo(map);
+    map.flyTo(p,15);
+  }catch(e){toast(e)}
+};
+
+/* ---------- Búsqueda ---------- */
+const NOM="https://nominatim.openstreetmap.org/";
+const geo=async q=>(await fetch(NOM+"search?format=jsonv2&limit=6&accept-language=es&q="+encodeURIComponent(q))).json();
+const rev=async(la,lo)=>(await fetch(NOM+"reverse?format=jsonv2&accept-language=es&lat="+la+"&lon="+lo)).json();
+const fromNom=r=>({lat:+r.lat,lon:+r.lon,name:r.name||String(r.display_name).split(",")[0],addr:r.display_name});
+
+let mk,sel;
+function place(p,fly=true){
+  sel=p;
+  mk&&map.removeLayer(mk);
+  mk=L.marker([p.lat,p.lon],{icon:PIN}).addTo(map).bindPopup("<b>"+esc(p.name)+"</b>");
+  if(fly)map.flyTo([p.lat,p.lon],Math.max(map.getZoom(),15));
+  const c=$("#card");c.hidden=false;
+  c.innerHTML=`<h3>${esc(p.name)}</h3><p>${esc(p.addr)}</p><p class="c">${p.lat.toFixed(5)}, ${p.lon.toFixed(5)}</p>
+  <div class="btns"><button id="cb">Cómo llegar</button><button id="cf">Salir de aquí</button><button id="cs">Copiar enlace</button></div>`;
+  $("#cb").onclick=()=>useAs("b");
+  $("#cf").onclick=()=>useAs("a");
+  $("#cs").onclick=()=>navigator.clipboard.writeText(location.origin+location.pathname+"#16/"+p.lat.toFixed(5)+"/"+p.lon.toFixed(5)).then(()=>toast("Enlace copiado"),()=>toast("No se pudo copiar"));
+}
+$("#fS").onsubmit=async e=>{
+  e.preventDefault();
+  const q=$("#q").value.trim();if(!q)return;
+  $("#list").innerHTML="<li>Buscando…</li>";$("#card").hidden=true;
+  try{
+    const r=await geo(q);
+    if(!r.length){$("#list").innerHTML="<li>Sin resultados para «"+esc(q)+"». Prueba con otra ciudad o dirección.</li>";return}
+    $("#list").innerHTML="";
+    r.forEach(x=>{
+      const p=fromNom(x),li=document.createElement("li");
+      li.tabIndex=0;
+      li.innerHTML=`<b>${esc(p.name)}</b><small>${esc(p.addr)}</small>`;
+      li.onclick=()=>{$("#list").innerHTML="";place(p)};
+      li.onkeydown=ev=>ev.key==="Enter"&&li.click();
+      $("#list").append(li);
+    });
+    const bb=L.latLngBounds(r.map(x=>[+x.lat,+x.lon]));
+    r.length>1?map.fitBounds(bb,{padding:[60,60],maxZoom:14}):($("#list").firstChild.click());
+  }catch(err){$("#list").innerHTML="<li>No hay conexión con el buscador. Inténtalo de nuevo.</li>"}
+};
+map.on("click",async e=>{if(window.measuring)return;
+  try{
+    const r=await rev(e.latlng.lat,e.latlng.lng);
+    $("#list").innerHTML="";
+    place(r&&r.display_name?fromNom(r):{lat:e.latlng.lat,lon:e.latlng.lng,name:"Punto en el mapa",addr:"Sin dirección registrada"},false);
+  }catch(err){place({lat:e.latlng.lat,lon:e.latlng.lng,name:"Punto en el mapa",addr:"Sin dirección registrada"},false)}
+});
+
+/* ---------- Pestañas ---------- */
+function tab(r){
+  $("#vS").hidden=r;$("#vR").hidden=!r;
+  $("#tS").classList.toggle("on",!r);$("#tR").classList.toggle("on",r);
+}
+$("#tS").onclick=()=>tab(false);
+$("#tR").onclick=()=>tab(true);
+function useAs(id){
+  const i=$("#"+id);i.value=sel.name;i.ll=[sel.lat,sel.lon];
+  tab(true);
+  if(!$("#a").value&&id==="b")$("#a").value="Mi ubicación";
+  if($("#a").value&&$("#b").value)$("#go").focus();
+}
+["a","b"].forEach(id=>$("#"+id).addEventListener("input",e=>delete e.target.ll));
+
+/* ---------- Rutas ---------- */
+let prof="car",routeL,ends=[];
+document.querySelectorAll(".modes button").forEach(b=>b.onclick=()=>{
+  prof=b.dataset.p;
+  document.querySelectorAll(".modes button").forEach(x=>x.classList.toggle("on",x===b));
+});
+const resolve=async i=>{
+  if(i.ll)return i.ll;
+  const v=i.value.trim();
+  if(!v)throw "Escribe el origen y el destino.";
+  if(/^mi ubicaci/i.test(v))return me();
+  const r=await geo(v);
+  if(!r[0])throw "No encontré «"+v+"».";
+  return [+r[0].lat,+r[0].lon];
+};
+const fD=m=>m<1000?Math.round(m)+" m":(m/1000).toFixed(m<10000?1:0)+" km";
+const fT=s=>{const m=Math.round(s/60);return m<60?m+" min":Math.floor(m/60)+" h "+(m%60)+" min"};
+const MOD={left:"a la izquierda",right:"a la derecha",straight:"recto","slight left":"ligeramente a la izquierda","slight right":"ligeramente a la derecha","sharp left":"cerrado a la izquierda","sharp right":"cerrado a la derecha",uturn:"en U"};
+function say(s){
+  const m=s.maneuver,t=m.type,d=MOD[m.modifier]||"",r=s.name?" por "+s.name:"";
+  if(t==="depart")return "Sal"+r;
+  if(t==="arrive")return "Llegas a tu destino";
+  if(t==="roundabout"||t==="rotary")return "Entra en la rotonda y sal"+r;
+  if(/turn|end of road|fork|off ramp|on ramp/.test(t))return "Gira "+d+r;
+  return "Sigue "+(d||"recto")+r;
+}
+$("#go").onclick=async()=>{
+  $("#sum").textContent="Calculando…";$("#steps").innerHTML="";
+  try{
+    const [A,B]=await Promise.all([resolve($("#a")),resolve($("#b"))]);
+    const u=`https://routing.openstreetmap.de/routed-${prof}/route/v1/driving/${A[1]},${A[0]};${B[1]},${B[0]}?overview=full&geometries=geojson&steps=true`;
+    const j=await (await fetch(u)).json();
+    if(!j.routes||!j.routes[0])throw "No hay una ruta posible entre esos puntos.";
+    const r=j.routes[0];
+    routeL&&map.removeLayer(routeL);ends.forEach(x=>map.removeLayer(x));
+    routeL=L.geoJSON(r.geometry,{style:{color:"#fff",weight:10,opacity:.9}}).addTo(map);
+    window.rl2&&map.removeLayer(rl2);rl2=L.geoJSON(r.geometry,{style:{color:getComputedStyle(document.documentElement).getPropertyValue("--route").trim()||"#e4572e",weight:6}}).addTo(map).bringToFront();
+    ends=[L.circleMarker(A,{radius:7,color:"#fff",weight:3,fillColor:"#1b7a99",fillOpacity:1}).addTo(map),L.circleMarker(B,{radius:7,color:"#fff",weight:3,fillColor:"#e4572e",fillOpacity:1}).addTo(map)];
+    map.fitBounds(routeL.getBounds(),{padding:[70,70]});
+    $("#sum").innerHTML=`<span>${fT(r.duration)}</span> · ${fD(r.distance)}<br><small>Llegas a las ${new Date(Date.now()+r.duration*1000).toLocaleTimeString([],{hour:"2-digit",minute:"2-digit"})}</small>`;
+    $("#steps").innerHTML=r.legs[0].steps.map(s=>`<li data-ll="${s.maneuver.location[1]},${s.maneuver.location[0]}">${esc(say(s))} <small>${fD(s.distance)}</small></li>`).join("");
+  }catch(e){$("#sum").textContent="";toast(typeof e==="string"?e:"No se pudo calcular la ruta. Revisa tu conexión.")}
+};
+$("#vR").addEventListener("keydown",e=>e.key==="Enter"&&$("#go").click());
+const PIN=L.divIcon({className:"",html:'<svg width="30" height="40" viewBox="0 0 30 40"><path d="M15 39C15 39 2 24 2 14a13 13 0 0 1 26 0c0 10-13 25-13 25z" style="fill:var(--pin);stroke:var(--pinS)" stroke-width="2.5"/><circle cx="15" cy="14" r="5" style="fill:var(--pinS)"/></svg>',iconSize:[30,40],iconAnchor:[15,39],popupAnchor:[0,-34]});
+
+/* ===== Mejoras ===== */
+const LS={g:(k,d)=>{try{return JSON.parse(localStorage[k])}catch(e){return d}},s:(k,v)=>{try{localStorage[k]=JSON.stringify(v)}catch(e){}}};
+if(matchMedia("(prefers-reduced-motion:reduce)").matches)map.flyTo=(a,z)=>map.setView(a,z,{animate:false});
+
+/* Pestañas (Lugares, Ruta, Guardados) */
+tab=function(r){["S","R","F"].forEach(k=>{const on=(r===true&&k==="R")||(r==="F"&&k==="F")||(!r&&k==="S");$("#v"+k).hidden=!on;$("#t"+k).classList.toggle("on",on)});if(r==="F")drawFav()};
+$("#tF").onclick=()=>tab("F");
+$("#col").onclick=()=>{const m=$("#panel").classList.toggle("min");$("#col").textContent=m?"▸":"▾"};
+
+/* Favoritos y acciones del lugar */
+const favs=()=>LS.g("mxFav",[]),same=(a,b)=>a.lat===b.lat&&a.lon===b.lon;
+function drawFav(){
+  $("#fav").innerHTML=favs().length?"":"<li>Aún no guardas lugares. Abre un lugar y toca Guardar.</li>";
+  favs().forEach((p,i)=>{const li=document.createElement("li");
+    li.innerHTML=`<span><b>${esc(p.name)}</b><small>${esc(p.addr)}</small></span><button aria-label="Quitar" style="border:0;background:none">✕</button>`;
+    li.onclick=e=>{if(e.target.tagName==="BUTTON"){const f=favs();f.splice(i,1);LS.s("mxFav",f);drawFav()}else{tab(false);place(p)}};
+    $("#fav").append(li)});
+}
+const _place=place;
+place=function(p,f){
+  _place(p,f);
+  const u=location.href.split("#")[0]+"#16/"+p.lat.toFixed(5)+"/"+p.lon.toFixed(5);
+  $("#card .btns").insertAdjacentHTML("beforeend",`<button id="cfv">${favs().some(x=>same(x,p))?"★ Guardado":"☆ Guardar"}</button><button id="cc">Copiar coordenadas</button><button id="cw">Compartir</button><a target="_blank" rel="noopener" href="https://www.openstreetmap.org/?mlat=${p.lat}&mlon=${p.lon}#map=17/${p.lat}/${p.lon}">Abrir en OSM</a>`);
+  $("#cs").onclick=()=>navigator.clipboard.writeText(u).then(()=>toast("Enlace copiado"),()=>toast("No se pudo copiar"));
+  $("#cfv").onclick=()=>{let f=favs();const k=f.findIndex(x=>same(x,p));k<0?f.unshift(p):f.splice(k,1);LS.s("mxFav",f);$("#cfv").textContent=k<0?"★ Guardado":"☆ Guardar";toast(k<0?"Lugar guardado":"Lugar quitado")};
+  $("#cc").onclick=()=>navigator.clipboard.writeText(p.lat.toFixed(6)+", "+p.lon.toFixed(6)).then(()=>toast("Coordenadas copiadas"),()=>toast("No se pudo copiar"));
+  $("#cw").onclick=()=>navigator.share?navigator.share({title:p.name,url:u}).catch(()=>{}):$("#cs").click();
+};
+
+/* Historial y coordenadas */
+const drawHist=()=>{const h=LS.g("mxHist",[]);$("#hist").innerHTML=$("#q").value||!h.length?"":h.map(x=>`<li data-q="${esc(x)}">🕘 ${esc(x)}</li>`).join("")};
+$("#q").addEventListener("focus",drawHist);$("#q").addEventListener("input",drawHist);
+$("#hist").onclick=e=>{const li=e.target.closest("li");if(li){$("#q").value=li.dataset.q;$("#hist").innerHTML="";$("#fS").requestSubmit()}};
+$("#fS").addEventListener("submit",e=>{
+  const v=$("#q").value.trim(),m=v.match(/^(-?\d+(?:\.\d+)?)\s*[, ]\s*(-?\d+(?:\.\d+)?)$/);
+  if(v){LS.s("mxHist",[v,...LS.g("mxHist",[]).filter(x=>x!==v)].slice(0,6));$("#hist").innerHTML=""}
+  if(m&&Math.abs(+m[1])<=90&&Math.abs(+m[2])<=180){e.preventDefault();e.stopImmediatePropagation();$("#list").innerHTML="";place({lat:+m[1],lon:+m[2],name:"Coordenadas",addr:m[1]+", "+m[2]})}
+},true);
+
+/* Categorías cercanas */
+const grp=L.layerGroup().addTo(map);
+[["🍽️","restaurante"],["☕","cafetería"],["💊","farmacia"],["⛽","gasolinera"],["🏨","hotel"],["🏧","cajero"],["🛒","supermercado"]].forEach(([i,k])=>{
+  const b=document.createElement("button");b.textContent=i+" "+k;
+  b.onclick=async()=>{
+    const bb=map.getBounds(),vb=[bb.getWest(),bb.getNorth(),bb.getEast(),bb.getSouth()].join();
+    $("#list").innerHTML="<li>Buscando "+k+" en esta zona…</li>";$("#card").hidden=true;grp.clearLayers();
+    try{
+      const r=(await (await fetch(NOM+"search?format=jsonv2&limit=20&accept-language=es&bounded=1&viewbox="+vb+"&q="+encodeURIComponent(k))).json()).map(fromNom);
+      const c=map.getCenter();r.forEach(p=>p.d=c.distanceTo([p.lat,p.lon]));r.sort((a,b)=>a.d-b.d);
+      if(!r.length){$("#list").innerHTML="<li>No hay "+k+" en esta zona. Aleja el mapa e inténtalo otra vez.</li>";return}
+      $("#list").innerHTML="";
+      r.forEach(p=>{const li=document.createElement("li");li.tabIndex=0;li.innerHTML=`<b>${esc(p.name)}</b><small>${fD(p.d)} · ${esc(p.addr)}</small>`;
+        li.onclick=()=>place(p);li.onkeydown=ev=>ev.key==="Enter"&&li.click();$("#list").append(li);
+        L.marker([p.lat,p.lon],{icon:PIN}).addTo(grp).bindPopup("<b>"+esc(p.name)+"</b>").on("click",()=>place(p,false))});
+    }catch(e){$("#list").innerHTML="<li>No hay conexión con el buscador.</li>"}
+  };
+  $("#cats").append(b);
+});
+
+/* Ruta: invertir, desde mi ubicación, borrar, paso a paso */
+$("#sw").onclick=()=>{const a=$("#a"),b=$("#b"),v=a.value,l=a.ll;a.value=b.value;b.value=v;a.ll=b.ll;b.ll=l;if(!a.ll)delete a.ll;if(!b.ll)delete b.ll};
+$("#mp").onclick=()=>{$("#a").value="Mi ubicación";delete $("#a").ll};
+$("#cl").onclick=()=>{[routeL,window.rl2,...ends].forEach(x=>x&&map.removeLayer(x));ends=[];$("#sum").textContent="";$("#steps").innerHTML=""};
+$("#steps").onclick=e=>{const li=e.target.closest("li");if(li)map.flyTo(li.dataset.ll.split(",").map(Number),17)};
+
+/* Ubicación en vivo */
+let wid=null,acc;
+$("#fl").onclick=()=>{
+  if(wid!==null){navigator.geolocation.clearWatch(wid);wid=null;$("#fl").classList.remove("on");return toast("Seguimiento desactivado")}
+  if(!navigator.geolocation)return toast("Tu navegador no tiene geolocalización.");
+  let first=true;
+  wid=navigator.geolocation.watchPosition(p=>{
+    const ll=[p.coords.latitude,p.coords.longitude];
+    dot&&map.removeLayer(dot);acc&&map.removeLayer(acc);
+    dot=L.circleMarker(ll,{radius:8,color:"#fff",weight:3,fillColor:"#1b7a99",fillOpacity:1}).addTo(map);
+    acc=L.circle(ll,{radius:p.coords.accuracy,weight:1,color:"#1b7a99",fillOpacity:.12}).addTo(map);
+    first?map.flyTo(ll,16):map.panTo(ll);first=false;
+  },()=>{toast("No pude obtener tu ubicación. Revisa los permisos.");wid=null;$("#fl").classList.remove("on")},{enableHighAccuracy:true});
+  $("#fl").classList.add("on");toast("Siguiendo tu ubicación");
+};
+
+/* Medir distancia */
+let pts=[],ml;
+const stopMeasure=()=>{window.measuring=false;$("#ms").classList.remove("on");ml&&map.removeLayer(ml);ml=null;pts=[];$("#hud").textContent=""};
+$("#ms").onclick=()=>{if(window.measuring)return stopMeasure();window.measuring=true;$("#ms").classList.add("on");$("#hud").textContent="Toca puntos para medir · Esc para salir"};
+map.on("click",e=>{
+  if(!window.measuring)return;
+  pts.push(e.latlng);ml&&map.removeLayer(ml);
+  ml=L.polyline(pts,{color:"#f2b134",weight:4,dashArray:"8 6"}).addTo(map);
+  let t=0;for(let i=1;i<pts.length;i++)t+=pts[i-1].distanceTo(pts[i]);
+  $("#hud").textContent="Distancia: "+fD(t);
+});
+
+/* Mapa: capas extra, vista, tema, pantalla completa, atajos, coordenadas, conexión */
+LAYERS.claro=["Claro",L.tileLayer("https://server.arcgisonline.com/ArcGIS/rest/services/Canvas/World_Light_Gray_Base/MapServer/tile/{z}/{y}/{x}",{maxZoom:19,maxNativeZoom:16,attribution:"Mapa © Esri, HERE, Garmin"})];
+LAYERS.bici=["Bici",L.tileLayer("https://{s}.tile-cyclosm.openstreetmap.fr/cyclosm/{z}/{x}/{y}.png",{maxZoom:19,attribution:"© CyclOSM, OSM"})];
+["claro","bici"].forEach(k=>{const b=document.createElement("button");b.textContent=LAYERS[k][0];b.dataset.k=k;b.onclick=()=>setBase(k);$("#lay").append(b)});
+setBase(LAYERS[saved]?saved:"calles");
+if(!h){const v=LS.g("mxView");v&&map.setView(v.c,v.z)}
+map.on("moveend",()=>LS.s("mxView",{c:map.getCenter(),z:map.getZoom()}));
+$("#hm").onclick=()=>map.flyTo([20,0],2);
+$("#fs").onclick=()=>document.fullscreenElement?document.exitFullscreen():document.documentElement.requestFullscreen().catch(()=>toast("Pantalla completa no disponible"));
+const T=LS.g("mxTheme");if(T)document.documentElement.dataset.t=T;
+$("#dk").onclick=()=>{const d=document.documentElement,dark=d.dataset.t?d.dataset.t==="dark":matchMedia("(prefers-color-scheme:dark)").matches;d.dataset.t=dark?"light":"dark";LS.s("mxTheme",d.dataset.t)};
+map.on("mousemove",e=>{if(!window.measuring)$("#hud").textContent=e.latlng.lat.toFixed(5)+", "+e.latlng.lng.toFixed(5)});
+map.on("contextmenu",e=>{place({lat:e.latlng.lat,lon:e.latlng.lng,name:"Punto elegido",addr:e.latlng.lat.toFixed(5)+", "+e.latlng.lng.toFixed(5)},false);useAs("a");toast("Origen fijado. Elige el destino.")});
+addEventListener("keydown",e=>{
+  if(e.target.tagName==="INPUT")return e.key==="Escape"&&e.target.blur();
+  if(e.ctrlKey||e.metaKey||e.altKey)return;
+  if(e.key==="/"){e.preventDefault();tab(false);$("#q").focus()}
+  else if(e.key==="l")$("#loc").click();
+  else if(e.key==="m")$("#ms").click();
+  else if(e.key==="+")map.zoomIn();
+  else if(e.key==="-")map.zoomOut();
+  else if(e.key==="Escape"){grp.clearLayers();stopMeasure()}
+});
+addEventListener("offline",()=>toast("Sin conexión. El mapa y las búsquedas no funcionarán."));
+addEventListener("online",()=>toast("Conexión restablecida"));
+
+/* Interfaces: Map Explorer, Google Maps, Apple Maps y Waze */
+const UIS=[["default","Map Explorer",null],["google","Google Maps","calles"],["apple","Apple Maps","claro"],["waze","Waze","oscuro"]];
+function setUI(k,sw){
+  const u=UIS.find(x=>x[0]===k)||UIS[0];
+  document.documentElement.dataset.ui=u[0];LS.s("mxUI",u[0]);
+  document.querySelectorAll("#uim button").forEach(b=>b.classList.toggle("on",b.dataset.k===u[0]));
+  if(sw){if(u[2])setBase(u[2]);toast("Interfaz: "+u[1])}
+}
+UIS.forEach(u=>{const b=document.createElement("button");b.textContent=u[1];b.dataset.k=u[0];b.onclick=()=>{setUI(u[0],true);$("#uim").hidden=true};$("#uim").append(b)});
+$("#ui").onclick=e=>{e.stopPropagation();$("#lgm").hidden=true;$("#uim").hidden=!$("#uim").hidden};
+document.addEventListener("click",e=>{if(!e.target.closest("#uim"))$("#uim").hidden=true;if(!e.target.closest("#lgm"))$("#lgm").hidden=true});
+setUI(LS.g("mxUI","default"));
+
+/* ===== Idiomas: Español, English, Português, Français, 日本語 ===== */
+const LANGS=[["es","Español"],["en","English"],["pt","Português"],["fr","Français"],["ja","日本語"]];
+let LANG=LS.g("mxLang",null)||(navigator.language||"es").slice(0,2);
+if(!LANGS.some(l=>l[0]===LANG))LANG="es";
+const LI=LANGS.findIndex(l=>l[0]===LANG),K=LI-1;
+document.documentElement.lang=LANG;
+const _f=fetch.bind(window);
+window.fetch=(u,o)=>_f(typeof u==="string"?u.replace("accept-language=es","accept-language="+LANG):u,o);
+const parse=t=>{const o=Object.create(null);t.split("\n").forEach(l=>{const p=l.split("~");o[p[0]]=p.slice(1)});return o};
+const D=parse(`Lugares~Places~Lugares~Lieux~場所
+Ruta~Route~Rota~Itinéraire~ルート
+Guardados~Saved~Salvos~Enregistrés~保存済み
+Contraer panel~Collapse panel~Recolher painel~Réduire le panneau~パネルを閉じる
+Busca un lugar o dirección~Search for a place or address~Busque um lugar ou endereço~Rechercher un lieu ou une adresse~場所や住所を検索
+Origen (o escribe: Mi ubicación)~Start (or type: My location)~Origem (ou digite: Minha localização)~Départ (ou saisissez : Ma position)~出発地（「現在地」と入力も可）
+Destino~Destination~Destino~Destination~目的地
+Origen~Start~Origem~Départ~出発地
+Buscar lugar~Search place~Buscar lugar~Rechercher un lieu~場所を検索
+Buscar~Search~Buscar~Rechercher~検索
+Auto~Car~Carro~Voiture~車
+Bici~Bike~Bicicleta~Vélo~自転車
+A pie~Walk~A pé~À pied~徒歩
+Invertir~Swap~Inverter~Inverser~入れ替え
+Desde mi ubicación~From my location~Da minha localização~Depuis ma position~現在地から
+Borrar~Clear~Limpar~Effacer~消去
+Calcular ruta~Get route~Calcular rota~Calculer l'itinéraire~ルートを検索
+Acercar~Zoom in~Aproximar~Zoom avant~拡大
+Alejar~Zoom out~Afastar~Zoom arrière~縮小
+Mi ubicación~My location~Minha localização~Ma position~現在地
+Seguir mi ubicación~Follow my location~Seguir minha localização~Suivre ma position~現在地を追跡
+Medir distancia~Measure distance~Medir distância~Mesurer la distance~距離を測る
+Ver el mundo~View the world~Ver o mundo~Voir le monde~世界を表示
+Pantalla completa~Full screen~Tela cheia~Plein écran~全画面
+Cambiar tema~Change theme~Mudar tema~Changer de thème~テーマ変更
+Cambiar interfaz~Change interface~Mudar interface~Changer d'interface~UIを変更
+Idioma~Language~Idioma~Langue~言語
+Mapa~Map~Mapa~Plan~地図
+Satélite~Satellite~Satélite~Satellite~衛星
+Relieve~Terrain~Relevo~Relief~地形
+Oscuro~Dark~Escuro~Sombre~ダーク
+Claro~Light~Claro~Clair~ライト
+restaurante~restaurants~restaurantes~restaurants~レストラン
+cafetería~cafés~cafeterias~cafés~カフェ
+farmacia~pharmacies~farmácias~pharmacies~薬局
+gasolinera~gas stations~postos de gasolina~stations-service~ガソリンスタンド
+hotel~hotels~hotéis~hôtels~ホテル
+cajero~ATMs~caixas eletrônicos~distributeurs~ATM
+supermercado~supermarkets~supermercados~supermarchés~スーパー
+Cómo llegar~Directions~Como chegar~Itinéraire~経路
+Salir de aquí~Start from here~Sair daqui~Partir d'ici~ここから出発
+Copiar enlace~Copy link~Copiar link~Copier le lien~リンクをコピー
+Guardar~Save~Salvar~Enregistrer~保存
+Guardado~Saved~Salvo~Enregistré~保存済み
+Copiar coordenadas~Copy coordinates~Copiar coordenadas~Copier les coordonnées~座標をコピー
+Compartir~Share~Compartilhar~Partager~共有
+Abrir en OSM~Open in OSM~Abrir no OSM~Ouvrir dans OSM~OSMで開く
+Punto en el mapa~Point on the map~Ponto no mapa~Point sur la carte~地図上の地点
+Sin dirección registrada~No address on record~Sem endereço registrado~Aucune adresse enregistrée~住所情報なし
+Coordenadas~Coordinates~Coordenadas~Coordonnées~座標
+Punto elegido~Chosen point~Ponto escolhido~Point choisi~選択した地点
+Buscando…~Searching…~Buscando…~Recherche…~検索中…
+Calculando…~Calculating…~Calculando…~Calcul…~計算中…
+Aún no guardas lugares. Abre un lugar y toca Guardar.~You haven't saved any places yet. Open a place and tap Save.~Você ainda não salvou lugares. Abra um lugar e toque em Salvar.~Aucun lieu enregistré. Ouvrez un lieu et touchez Enregistrer.~保存した場所はまだありません。場所を開いて「保存」を押してください。
+No hay conexión con el buscador. Inténtalo de nuevo.~Can't reach the search service. Try again.~Sem conexão com o buscador. Tente novamente.~Connexion au moteur de recherche impossible. Réessayez.~検索サービスに接続できません。もう一度お試しください。
+No hay conexión con el buscador.~Can't reach the search service.~Sem conexão com o buscador.~Connexion au moteur de recherche impossible.~検索サービスに接続できません。
+Llegas a tu destino~You have arrived~Você chegou ao destino~Vous êtes arrivé~目的地に到着します
+Enlace copiado~Link copied~Link copiado~Lien copié~リンクをコピーしました
+No se pudo copiar~Couldn't copy~Não foi possível copiar~Copie impossible~コピーできませんでした
+Coordenadas copiadas~Coordinates copied~Coordenadas copiadas~Coordonnées copiées~座標をコピーしました
+Lugar guardado~Place saved~Lugar salvo~Lieu enregistré~保存しました
+Lugar quitado~Place removed~Lugar removido~Lieu supprimé~削除しました
+Origen fijado. Elige el destino.~Start set. Choose a destination.~Origem definida. Escolha o destino.~Départ défini. Choisissez la destination.~出発地を設定しました。目的地を選んでください。
+Seguimiento desactivado~Tracking off~Seguimento desativado~Suivi désactivé~追跡をオフにしました
+Tu navegador no tiene geolocalización.~Your browser doesn't support geolocation.~Seu navegador não tem geolocalização.~Votre navigateur ne prend pas en charge la géolocalisation.~お使いのブラウザは位置情報に対応していません。
+Siguiendo tu ubicación~Following your location~Seguindo sua localização~Suivi de votre position~現在地を追跡中
+No pude obtener tu ubicación. Revisa los permisos del navegador.~Couldn't get your location. Check your browser permissions.~Não consegui obter sua localização. Verifique as permissões do navegador.~Impossible d'obtenir votre position. Vérifiez les autorisations du navigateur.~現在地を取得できません。ブラウザの権限を確認してください。
+No pude obtener tu ubicación. Revisa los permisos.~Couldn't get your location. Check permissions.~Não consegui obter sua localização. Verifique as permissões.~Impossible d'obtenir votre position. Vérifiez les autorisations.~現在地を取得できません。権限を確認してください。
+Pantalla completa no disponible~Full screen unavailable~Tela cheia indisponível~Plein écran indisponible~全画面を利用できません
+Sin conexión. El mapa y las búsquedas no funcionarán.~Offline. The map and searches won't work.~Sem conexão. O mapa e as buscas não funcionarão.~Hors ligne. La carte et les recherches ne fonctionneront pas.~オフラインです。地図と検索は使えません。
+Conexión restablecida~Back online~Conexão restabelecida~Connexion rétablie~オンラインに戻りました
+Escribe el origen y el destino.~Enter a start and a destination.~Digite a origem e o destino.~Saisissez le départ et la destination.~出発地と目的地を入力してください。
+No hay una ruta posible entre esos puntos.~No route is possible between those points.~Não há rota possível entre esses pontos.~Aucun itinéraire possible entre ces points.~この2地点間のルートはありません。
+No se pudo calcular la ruta. Revisa tu conexión.~Couldn't calculate the route. Check your connection.~Não foi possível calcular a rota. Verifique sua conexão.~Impossible de calculer l'itinéraire. Vérifiez votre connexion.~ルートを計算できません。接続を確認してください。
+Toca puntos para medir · Esc para salir~Tap points to measure · Esc to exit~Toque em pontos para medir · Esc para sair~Touchez des points pour mesurer · Échap pour quitter~地点をタップして計測 · Escで終了`),MD=parse(`a la izquierda~left~à esquerda~à gauche~左
+a la derecha~right~à direita~à droite~右
+recto~straight~em frente~tout droit~まっすぐ
+ligeramente a la izquierda~slightly left~levemente à esquerda~légèrement à gauche~やや左
+ligeramente a la derecha~slightly right~levemente à direita~légèrement à droite~やや右
+cerrado a la izquierda~sharp left~acentuadamente à esquerda~franchement à gauche~鋭く左
+cerrado a la derecha~sharp right~acentuadamente à direita~franchement à droite~鋭く右
+en U~a U-turn~retorno~demi-tour~Uターン`);
+const RULES=[
+[/^Sin resultados para «(.+)»\. Prueba con otra ciudad o dirección\.$/,["No results for “$1”. Try another city or address.","Sem resultados para “$1”. Tente outra cidade ou endereço.","Aucun résultat pour « $1 ». Essayez une autre ville ou adresse.","「$1」の結果はありません。別の都市や住所をお試しください。"]],
+[/^No encontré «(.+)»\.$/,["I couldn't find “$1”.","Não encontrei “$1”.","Je n'ai pas trouvé « $1 ».","「$1」が見つかりません。"]],
+[/^Interfaz: (.+)$/,["Interface: $1","Interface: $1","Interface : $1","UI：$1"]],
+[/^Distancia: (.+)$/,["Distance: $1","Distância: $1","Distance : $1","距離：$1"]],
+[/^Llegas a las (.+)$/,["Arrival at $1","Chegada às $1","Arrivée à $1","到着予定 $1"]],
+[/^Buscando (.+) en esta zona…$/,["Searching for $1 in this area…","Buscando $1 nesta área…","Recherche de $1 dans cette zone…","この周辺で$1を検索中…"]],
+[/^No hay (.+) en esta zona\. Aleja el mapa e inténtalo otra vez\.$/,["No $1 in this area. Zoom out and try again.","Sem $1 nesta área. Afaste o mapa e tente novamente.","Aucun résultat ($1) dans cette zone. Dézoomez et réessayez.","この周辺に$1はありません。地図を縮小してもう一度お試しください。"]],
+[/^(\d+) h (\d+) min$/,[null,null,null,"$1時間$2分"]],
+[/^(\d+) min$/,[null,null,null,"$1分"]]
+];
+function stepTr(c){
+  let m;
+  if(m=c.match(/^Sal(?: por (.+))?$/)){const r=m[1];return [r?"Head out on "+r:"Head out",r?"Siga por "+r:"Siga",r?"Partez par "+r:"Partez",r?r+"を出発":"出発"][K]}
+  if(m=c.match(/^Entra en la rotonda y sal(?: por (.+))?$/)){const r=m[1];return ["Enter the roundabout and exit"+(r?" onto "+r:""),"Entre na rotatória e saia"+(r?" em "+r:""),"Entrez dans le rond-point et sortez"+(r?" sur "+r:""),"ロータリーに入り"+(r?r+"方面へ出る":"出る")][K]}
+  if((m=c.match(/^(Gira|Sigue) (.+?)(?: por (.+))?$/))&&MD[m[2]]){
+    const w=MD[m[2]][K],r=m[3],t=m[1]==="Gira";
+    return [(t?"Turn ":"Continue ")+w+(r?(t?" onto ":" on ")+r:""),(t?"Vire ":"Siga ")+w+(r?" em "+r:""),(t?"Tournez ":"Continuez ")+w+(r?" sur "+r:""),w+(w==="Uターン"?"する":w==="まっすぐ"?"進む":t?"に曲がる":"へ進む")+(r?"（"+r+"）":"")][K];
+  }
+  return null;
+}
+function rules(c){
+  for(const [re,a] of RULES){const m=c.match(re);if(m&&a[K])return a[K].replace(/\$(\d)/g,(_,i)=>D[m[i]]?D[m[i]][K]:m[i])}
+  return stepTr(c);
+}
+function tr(s){
+  const m=s.match(/^(\s*)([\s\S]*?)(\s*)$/),c=m[2];
+  if(!c)return s;
+  let o=D[c]?D[c][K]:null;
+  if(o==null){const e=c.match(/^([^\p{L}\d]+\s)(.+)$/u);if(e&&D[e[2]])o=e[1]+D[e[2]][K]}
+  if(o==null)o=rules(c);
+  return o==null?s:m[1]+o+m[3];
+}
+function walk(n){
+  if(n.nodeType===3){const t=tr(n.nodeValue);if(t!==n.nodeValue)n.nodeValue=t;return}
+  if(n.nodeType!==1||/^(SCRIPT|STYLE|TEXTAREA)$/.test(n.tagName))return;
+  for(const a of ["placeholder","aria-label","title"]){const v=n.getAttribute(a);if(v){const t=tr(v);if(t!==v)n.setAttribute(a,t)}}
+  n.childNodes.forEach(walk);
+}
+LANGS.forEach(l=>{const b=document.createElement("button");b.textContent=l[1];b.className=l[0]===LANG?"on":"";b.onclick=()=>{LS.s("mxLang",l[0]);location.reload()};$("#lgm").append(b)});
+$("#lg").onclick=e=>{e.stopPropagation();$("#uim").hidden=true;$("#lgm").hidden=!$("#lgm").hidden};
+if(LI>0){
+  walk(document.body);
+  new MutationObserver(ms=>ms.forEach(m=>{
+    if(m.type==="childList")m.addedNodes.forEach(walk);
+    else if(m.type==="characterData")walk(m.target);
+    else walk(m.target);
+  })).observe(document.body,{childList:true,subtree:true,characterData:true,attributes:true,attributeFilter:["placeholder","aria-label","title"]});
+}
+</script>
+</body>
+</html>
